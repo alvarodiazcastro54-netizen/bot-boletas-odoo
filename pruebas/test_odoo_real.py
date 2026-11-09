@@ -163,17 +163,25 @@ def test_factura_de_la_empresa_con_credito_fiscal(odoo, boleta):
     assert costo == pytest.approx(11.00 / 1.18, abs=0.01)
 
 
-def test_retoma_un_registro_a_medias(odoo, boleta):
-    reg = Registrador(odoo)
-    r = reg.registrar(boleta)
-    orden = _orden(odoo, r.orden)
-    odoo.llamar("account.move", "unlink", ids=orden["invoice_ids"])
+class _FallaAlFacturar(Registrador):
+    def _facturar(self, *args, **kwargs):
+        raise RegistroError("falla simulada al crear la factura")
 
+
+def test_retoma_un_registro_a_medias(odoo, boleta):
+    with pytest.raises(RegistroError, match="simulada"):
+        _FallaAlFacturar(odoo).registrar(boleta)
+
+    reg = Registrador(odoo)
     plan = reg.planificar(boleta)
     assert plan.orden and not plan.ya_registrada and plan.productos_nuevos == 0
-    r2 = reg.registrar(boleta)
-    assert r2.orden == r.orden and r2.productos_nuevos == []
+    orden = _orden(odoo, plan.orden["name"])
+    assert orden["state"] == "purchase" and not orden["invoice_ids"]
+
+    r = reg.registrar(boleta)
+    assert r.orden == plan.orden["name"] and r.productos_nuevos == [] and not r.proveedor_nuevo
     assert len(_orden(odoo, r.orden)["invoice_ids"]) == 1
+    assert reg.planificar(boleta).ya_registrada
 
 
 def _categoria(odoo, padre: str, hija: str) -> int:

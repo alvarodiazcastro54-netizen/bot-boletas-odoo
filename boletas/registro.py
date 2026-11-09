@@ -99,16 +99,22 @@ class Registrador:
             return guardado[1]
         filas = self.odoo.buscar_leer("product.category", [("child_id", "=", False)],
                                       ["id", "complete_name"], orden="complete_name")
-        de_odoo = {f["res_id"] for f in self.odoo.buscar_leer(
-            "ir.model.data", [("model", "=", "product.category"),
-                              ("module", "in", ["product", "delivery", "point_of_sale", "stock", "account",
-                                                "sale", "purchase", "website_sale"])], ["res_id"])}
-        resultado = {f["complete_name"]: f["id"] for f in filas if f["id"] not in de_odoo}
+        externos = self._ids_externos("product.category", [f["id"] for f in filas])
+        modulos_odoo = {"product", "delivery", "point_of_sale", "stock", "account", "sale", "purchase",
+                        "website_sale"}
+        resultado = {f["complete_name"]: f["id"] for f in filas
+                     if externos.get(f["id"], "").split(".")[0] not in modulos_odoo}
         self._cache["categorias"] = (time.monotonic(), resultado)
         return resultado
 
     def nombres_categorias(self) -> list[str]:
         return list(self.categorias())
+
+    def _ids_externos(self, modelo: str, ids: list[int]) -> dict[int, str]:
+        if not ids:
+            return {}
+        respuesta = self.odoo.llamar(modelo, "get_external_id", ids=ids) or {}
+        return {int(k): v or "" for k, v in respuesta.items()}
 
     def tiene_campo(self, modelo: str, campo: str) -> bool:
         return campo in self._una_vez(("campos", modelo), lambda: self.odoo.campos(modelo))
@@ -141,20 +147,21 @@ class Registrador:
     def impuesto_igv_compra(self) -> int | None:
         def buscar():
             empresa_id = self.empresa_id or self.empresa()["id"]
-            filas = self.odoo.buscar_leer(
-                "ir.model.data",
-                [("module", "=", "account"), ("model", "=", "account.tax"),
-                 ("name", "=", f"{empresa_id}_purchase_tax_igv_18")],
-                ["res_id"], limite=1)
-            if filas:
-                return filas[0]["res_id"]
-            log.warning("No encontré el IGV de compras por su id externo; lo busco por sus datos.")
-            filas = self.odoo.buscar_leer(
+            candidatos = self.odoo.buscar_leer(
                 "account.tax",
                 [("type_tax_use", "=", "purchase"), ("amount", "=", 18), ("amount_type", "=", "percent"),
-                 ("company_id", "=", empresa_id), ("name", "in", ["IGV 18%", "VAT 18%"])],
-                ["id"], limite=1, orden="sequence, id")
-            return filas[0]["id"] if filas else None
+                 ("company_id", "=", empresa_id)],
+                ["id", "name"], orden="sequence, id")
+            externos = self._ids_externos("account.tax", [c["id"] for c in candidatos])
+            buscado = f"account.{empresa_id}_purchase_tax_igv_18"
+            for c in candidatos:
+                if externos.get(c["id"]) == buscado:
+                    return c["id"]
+            log.warning("No encontré el IGV de compras por su id externo; lo busco por su nombre.")
+            for c in candidatos:
+                if c["name"] in ("IGV 18%", "VAT 18%"):
+                    return c["id"]
+            return None
         return self._una_vez("igv", buscar)
 
     def pais_peru(self) -> int | None:

@@ -15,6 +15,9 @@ class OdooFalso:
                     {"id": 11, "complete_name": "Accesorios / Dijes y Llaveros"}]
         return []
 
+    def llamar(self, modelo, metodo, **argumentos):
+        return {str(i): False for i in argumentos.get("ids", [])}
+
     def campos(self, modelo):
         return set()
 

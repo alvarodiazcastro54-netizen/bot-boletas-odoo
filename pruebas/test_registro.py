@@ -13,18 +13,26 @@ class OdooSimulado:
 
     def buscar_leer(self, modelo, dominio, campos, limite=None, orden=None, contexto=None):
         self.consultas.append((modelo, dominio))
+        assert modelo != "ir.model.data", "un usuario que no es administrador no puede leer ir.model.data"
         if modelo == "res.company":
             return [{"id": 2, "name": "UYAY", "vat": RUC_EMPRESA}]
-        if modelo == "ir.model.data" and ("model", "=", "account.tax") in dominio:
-            assert ("name", "=", "2_purchase_tax_igv_18") in dominio
-            return [{"res_id": 25}]
-        if modelo == "ir.model.data":
-            return [{"res_id": 1}]
+        if modelo == "account.tax":
+            assert ("company_id", "=", 2) in dominio
+            return [{"id": 24, "name": "VAT 18% G NG"}, {"id": 25, "name": "VAT 18%"}, {"id": 26, "name": "VAT 18% NG"}]
         if modelo == "product.category":
             return [{"id": 1, "complete_name": "All"},
                     {"id": 10, "complete_name": "Hogar y Manualidades / Cocina"},
                     {"id": 11, "complete_name": "Accesorios / Dijes y Llaveros"}]
         return []
+
+    def llamar(self, modelo, metodo, **argumentos):
+        assert metodo == "get_external_id"
+        externos = {
+            "account.tax": {24: "account.2_purchase_tax_igv_18g_ng", 25: "account.2_purchase_tax_igv_18",
+                            26: "account.2_purchase_tax_igv_18_ng"},
+            "product.category": {1: "product.product_category_all"},
+        }[modelo]
+        return {str(i): externos.get(i, False) for i in argumentos["ids"]}
 
     def campos(self, modelo):
         return set()
