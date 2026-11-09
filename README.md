@@ -35,7 +35,7 @@ sigue desde donde quedó sin duplicar nada.
 
 - Probar la **lectura real con IA**: la empresa todavía no tiene clave de la API de Anthropic.
 - Medir la lectura con 10 a 20 boletas reales de tiendas distintas (`evaluar_lectura.py`).
-- Instalarlo en el servidor donde corre Odoo.
+- Instalarlo en AWS, en la instancia EC2 donde corre Odoo (pasos en la sección 5).
 
 ## Así se ve en Telegram
 
@@ -84,7 +84,7 @@ la IA.
    TELEGRAM_TOKEN=123456789:AAH...
    ```
 
-6. Arranca el bot (paso 4) y en Telegram envíale `/id`. Te responde con tu número de usuario. Ponlo en `.env`
+6. Arranca el bot (sección 4 en una PC, sección 5 en AWS) y en Telegram envíale `/id`. Te responde con tu número de usuario. Ponlo en `.env`
    y reinicia el bot. Para varias personas, sepáralos con comas:
 
    ```
@@ -128,9 +128,9 @@ igual de bien (`evaluar_lectura.py`).
 Prueba primero en una **copia de la base**: en el gestor de bases de Odoo usa «Duplicar» y marca
 «Neutralizar», así no se mandan correos ni se tocan datos reales.
 
-## 4. Instalar y arrancar
+## 4. Probarlo en una PC con Windows
 
-**En Windows, para probar:**
+Para probar antes de instalarlo en AWS:
 
 ```
 python -m venv .venv
@@ -140,20 +140,134 @@ notepad .env
 .venv\Scripts\python -m boletas
 ```
 
-**En el servidor de Odoo, con Docker:**
-
-```
-cp .env.example .env
-nano .env
-docker compose up -d --build
-docker compose logs -f
-```
-
-El bot usa *long polling*: él le pregunta a Telegram si hay mensajes, así que no hace falta abrir puertos ni
-tener dominio. Con `network_mode: host` habla con Odoo por `ODOO_URL=http://localhost:8069`.
-
 Al arrancar, el registro dice a qué Odoo y a qué empresa se conectó. Si no puede conectarse, se detiene y dice
 por qué.
+
+## 5. Instalarlo en AWS (en la misma instancia EC2 de Odoo)
+
+La idea es que el bot corra **en la misma instancia EC2 donde ya está Odoo**, dentro de Docker. Así:
+
+- **No cuesta más en AWS:** usa la misma máquina. Solo se paga el uso de la API de Anthropic.
+- **No hay que abrir ningún puerto:** el bot sale a internet para hablar con Telegram y Anthropic (HTTPS, 443) y
+  habla con Odoo por dentro de la máquina (`localhost`). No necesita reglas de entrada en el grupo de seguridad.
+- **La clave de Odoo no viaja por internet:** va de la instancia a sí misma.
+
+Esta parte todavía no se probó en la instancia real; los pasos son para Ubuntu (lo más común en EC2).
+
+### 5.1 Entrar a la instancia
+
+En la consola de AWS: *EC2 → Instancias →* elige la instancia de Odoo *→ Conectar → EC2 Instance Connect →
+Conectar*. Se abre una terminal en el navegador. También sirve SSH con la llave `.pem`:
+
+```
+ssh -i mi-llave.pem ubuntu@IP_DE_LA_INSTANCIA
+```
+
+### 5.2 Revisar memoria y agregar swap
+
+El bot usa unos 100 a 150 MB de RAM. En instancias chicas (por ejemplo una t3a.small de 2 GB, donde también
+corren Odoo y PostgreSQL) conviene revisar la memoria y, si no hay swap, agregar 2 GB:
+
+```
+free -h
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+### 5.3 Instalar Docker
+
+En Ubuntu:
+
+```
+sudo apt update
+sudo apt install -y docker.io docker-compose-v2 git
+sudo systemctl enable --now docker
+```
+
+En Amazon Linux 2023 se instala con `sudo dnf install -y docker git` y el complemento de Compose según la
+documentación de Docker.
+
+Si `docker compose version` responde, está listo.
+
+### 5.4 Descargar el bot y configurarlo
+
+```
+cd ~
+git clone https://github.com/alvarodiazcastro54-netizen/bot-boletas-odoo.git
+cd bot-boletas-odoo
+cp .env.example .env
+chmod 600 .env
+nano .env
+```
+
+En `nano` llena como mínimo:
+
+```
+TELEGRAM_TOKEN=el token de @BotFather
+TELEGRAM_USUARIOS_PERMITIDOS=los números de /id
+ANTHROPIC_API_KEY=sk-ant-...
+ODOO_URL=http://localhost:8069
+ODOO_BASE=nombre de la base de datos
+ODOO_CLAVE_API=la clave del usuario del bot
+ODOO_EMPRESA_ID=el número de la empresa de las compras
+```
+
+Guarda con `Ctrl+O`, `Enter`, y sal con `Ctrl+X`. `chmod 600` hace que solo tu usuario pueda leer el archivo.
+
+`ODOO_URL=http://localhost:8069` funciona si Odoo está instalado directamente en la instancia o en Docker con el
+puerto 8069 publicado, porque el bot usa `network_mode: host` (ve los puertos de la propia máquina). Si Odoo
+usa otro puerto, cámbialo ahí.
+
+Para la primera vez se recomienda `ODOO_BASE` apuntando a una **copia neutralizada** de la base, y recién
+después a la base real.
+
+### 5.5 Arrancarlo
+
+```
+sudo docker compose up -d --build
+sudo docker compose logs -f
+```
+
+En el registro debe aparecer «Conectado a Odoo … Las compras se registran en «…»» y «Bot en marcha». Sal del
+registro con `Ctrl+C` (el bot sigue corriendo).
+
+El bot se reinicia solo si falla o si se reinicia la instancia (`restart: unless-stopped` y Docker habilitado
+al arranque).
+
+### 5.6 Uso diario en el servidor
+
+| Para | Comando (dentro de `~/bot-boletas-odoo`) |
+|---|---|
+| Ver el registro | `sudo docker compose logs -f --tail 100` |
+| Reiniciar (por ejemplo, después de cambiar el `.env`) | `sudo docker compose restart` |
+| Detener | `sudo docker compose down` |
+| Actualizar a la última versión de GitHub | `git pull && sudo docker compose up -d --build` |
+| Ver cuánta memoria usa | `sudo docker stats --no-stream` |
+
+### 5.7 Si algo falla
+
+| Mensaje en el registro | Qué revisar |
+|---|---|
+| `Falta la variable …` | Esa línea del `.env` está vacía |
+| `Odoo rechazó la clave de la API` | `ODOO_CLAVE_API` o `ODOO_BASE` mal escritos, o la clave venció |
+| `El usuario del bot no tiene acceso a la empresa …` | En Odoo, dar acceso a esa empresa al usuario del bot, o corregir `ODOO_EMPRESA_ID` |
+| `No pude conectar con Odoo (ConnectError)` | Odoo no responde en `ODOO_URL`: revisa el puerto con `curl http://localhost:8069/web/health` |
+| El bot no contesta en Telegram | Token mal copiado, o tu número no está en `TELEGRAM_USUARIOS_PERMITIDOS` (escríbele `/id`) |
+| `La IA está ocupada o sin conexión` | Saldo de Anthropic agotado o sin salida a internet; revisa Billing en la consola de Anthropic |
+
+### 5.8 Seguridad en AWS
+
+- El bot **no necesita puertos de entrada**: no abras ninguno para él.
+- El grupo de seguridad de la instancia solo debería dejar entrar 80 y 443 (y SSH solo desde tu IP o usar
+  EC2 Instance Connect). Nunca abrir PostgreSQL (5432) a internet.
+- En `odoo.conf`, `list_db = False` y una `admin_passwd` larga, para que el gestor de bases no quede público.
+- Odoo detrás de HTTPS (nginx + Let's Encrypt).
+- Instantáneas automáticas del disco (*EC2 → Elastic Block Store → Administrador del ciclo de vida*) y copias de
+  la base de datos, porque el bot escribe en ella.
+- Una IP elástica para que la dirección de Odoo no cambie si la instancia se detiene.
 
 ## Configuración (`.env`)
 
@@ -216,8 +330,7 @@ Los números de línea son los de esta versión; si cambian, busca el nombre de 
    se compre más caro o más barato).
 6. **Mandar las fotos como archivo** en Telegram (clip → Archivo): llegan sin comprimir. De frente, con luz y sin
    tapar los totales ni el código QR.
-7. **Cuidar el servidor de Odoo**: HTTPS, copias de respaldo automáticas, el gestor de bases de datos cerrado al
-   público y solo los puertos necesarios abiertos.
+7. **Cuidar el servidor de AWS** antes de poner el bot en producción: ver la sección 5.8.
 
 ## Comandos del bot
 
