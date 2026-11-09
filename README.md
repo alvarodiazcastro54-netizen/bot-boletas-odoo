@@ -145,7 +145,8 @@ por qué.
 
 ## 5. Instalarlo en AWS (en la misma instancia EC2 de Odoo)
 
-La idea es que el bot corra **en la misma instancia EC2 donde ya está Odoo**, dentro de Docker. Así:
+La idea es que el bot corra **en la misma instancia EC2 donde ya está Odoo**, en su propio contenedor de
+Docker (Odoo puede estar instalado directo o también en Docker). Así:
 
 - **No cuesta más en AWS:** usa la misma máquina. Solo se paga el uso de la API de Anthropic.
 - **No hay que abrir ningún puerto:** el bot sale a internet para hablar con Telegram y Anthropic (HTTPS, 443) y
@@ -217,9 +218,53 @@ ODOO_EMPRESA_ID=el número de la empresa de las compras
 
 Guarda con `Ctrl+O`, `Enter`, y sal con `Ctrl+X`. `chmod 600` hace que solo tu usuario pueda leer el archivo.
 
-`ODOO_URL=http://localhost:8069` funciona si Odoo está instalado directamente en la instancia o en Docker con el
-puerto 8069 publicado, porque el bot usa `network_mode: host` (ve los puertos de la propia máquina). Si Odoo
-usa otro puerto, cámbialo ahí.
+#### Si Odoo corre en Docker
+
+Primero mira cómo está publicado el contenedor de Odoo:
+
+```
+sudo docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Ports}}"
+curl -s http://localhost:8069/web/health
+```
+
+**Opción A (la de este repositorio):** si en la columna de puertos aparece algo como `0.0.0.0:8069->8069/tcp`
+o `127.0.0.1:8069->8069/tcp`, y el `curl` responde `{"status": "pass"}`, deja `ODOO_URL=http://localhost:8069`.
+El bot usa `network_mode: host`, así que ve los puertos que la instancia tiene publicados.
+
+**Opción B (por la red de Docker de Odoo):** sirve si el puerto 8069 no está publicado en la instancia, por
+ejemplo si más adelante Odoo queda solo detrás de nginx. Busca la red y el nombre del contenedor de Odoo:
+
+```
+sudo docker network ls
+sudo docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' NOMBRE_DEL_CONTENEDOR_DE_ODOO
+```
+
+Cambia `docker-compose.yml` del bot por esto, poniendo el nombre de esa red:
+
+```yaml
+services:
+  bot-boletas:
+    build: .
+    env_file: .env
+    restart: unless-stopped
+    networks:
+      - red_de_odoo
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  red_de_odoo:
+    external: true
+    name: NOMBRE_DE_LA_RED
+```
+
+Y en `.env`, `ODOO_URL=http://NOMBRE_DEL_CONTENEDOR_DE_ODOO:8069`.
+
+En los dos casos el bot queda en su propia carpeta y su propio `docker compose`, separado del de Odoo: se puede
+actualizar o detener uno sin tocar el otro. No hace falta agregarlo al `docker-compose` de Odoo.
 
 Para la primera vez se recomienda `ODOO_BASE` apuntando a una **copia neutralizada** de la base, y recién
 después a la base real.
@@ -254,7 +299,7 @@ al arranque).
 | `Falta la variable …` | Esa línea del `.env` está vacía |
 | `Odoo rechazó la clave de la API` | `ODOO_CLAVE_API` o `ODOO_BASE` mal escritos, o la clave venció |
 | `El usuario del bot no tiene acceso a la empresa …` | En Odoo, dar acceso a esa empresa al usuario del bot, o corregir `ODOO_EMPRESA_ID` |
-| `No pude conectar con Odoo (ConnectError)` | Odoo no responde en `ODOO_URL`: revisa el puerto con `curl http://localhost:8069/web/health` |
+| `No pude conectar con Odoo (ConnectError)` | Odoo no responde en `ODOO_URL`: revisa el puerto con `curl http://localhost:8069/web/health` y `sudo docker ps`; si Odoo está en Docker sin el puerto publicado, usa la opción B de la sección 5.4 |
 | El bot no contesta en Telegram | Token mal copiado, o tu número no está en `TELEGRAM_USUARIOS_PERMITIDOS` (escríbele `/id`) |
 | `La IA está ocupada o sin conexión` | Saldo de Anthropic agotado o sin salida a internet; revisa Billing en la consola de Anthropic |
 
