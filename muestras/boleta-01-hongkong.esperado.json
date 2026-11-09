@@ -1,0 +1,108 @@
+{
+  "es_comprobante": true,
+  "legible": true,
+  "tipo": "boleta",
+  "serie_numero": "B410-00170132",
+  "fecha_emision": "2026-11-05",
+  "moneda": "PEN",
+  "proveedor": {
+    "ruc": "20101567428",
+    "razon_social": "SB TRADING S.R.LTDA",
+    "nombre_comercial": "HONG KONG MARKET",
+    "direccion": "AV. DE LAS ARTES NORTE 370 - SAN BORJA - LIMA"
+  },
+  "cliente_documento": "99999999",
+  "precios_incluyen_igv": true,
+  "lineas": [
+    {
+      "codigo": "5406059",
+      "descripcion": "SOL SET CORTADOR, CUCHILLO, PELADOR DE FRUTA ABS",
+      "nombre_cortado": true,
+      "cantidad": 2,
+      "unidad": null,
+      "precio_unitario": 22.0,
+      "descuento_pct": 50,
+      "descuento_monto": null,
+      "importe": 22.0,
+      "categoria": "Hogar y Manualidades / Cocina"
+    },
+    {
+      "codigo": "9070031",
+      "descripcion": "JARRO MUG ELECTRICO P/AUTO MS-156 UND",
+      "nombre_cortado": false,
+      "cantidad": 1,
+      "unidad": "UND",
+      "precio_unitario": 9.9,
+      "descuento_pct": 50,
+      "descuento_monto": null,
+      "importe": 4.95,
+      "categoria": "Hogar y Manualidades / Cocina"
+    },
+    {
+      "codigo": "5509007",
+      "descripcion": "SOL SORBETE ACERO INOX 2 PAR RECTO Y OBLICUO + CE",
+      "nombre_cortado": true,
+      "cantidad": 3,
+      "unidad": null,
+      "precio_unitario": 11.0,
+      "descuento_pct": 50,
+      "descuento_monto": null,
+      "importe": 16.5,
+      "categoria": "Hogar y Manualidades / Cocina"
+    },
+    {
+      "codigo": "2102086",
+      "descripcion": "CIERRE HERMETICO BOLSAS #651 (3x18.5CM) 4 UNI SET",
+      "nombre_cortado": false,
+      "cantidad": 1,
+      "unidad": null,
+      "precio_unitario": 5.5,
+      "descuento_pct": 50,
+      "descuento_monto": null,
+      "importe": 2.75,
+      "categoria": "Hogar y Manualidades / Cocina"
+    },
+    {
+      "codigo": "5501671",
+      "descripcion": "SOLING CUCHILLO COCINA ACERO INOX #736/MW9011 UN",
+      "nombre_cortado": false,
+      "cantidad": 1,
+      "unidad": "UN",
+      "precio_unitario": 3.5,
+      "descuento_pct": 50,
+      "descuento_monto": null,
+      "importe": 1.75,
+      "categoria": "Hogar y Manualidades / Cocina"
+    },
+    {
+      "codigo": "5512023",
+      "descripcion": "CHEFGO COBERTOR ALIMENTOS REDONDO POLICARB. 1:",
+      "nombre_cortado": true,
+      "cantidad": 1,
+      "unidad": null,
+      "precio_unitario": 22.5,
+      "descuento_pct": 70,
+      "descuento_monto": null,
+      "importe": 6.75,
+      "categoria": "Hogar y Manualidades / Cocina"
+    },
+    {
+      "codigo": "5010010",
+      "descripcion": "LLAVERO METAL UND",
+      "nombre_cortado": false,
+      "cantidad": 2,
+      "unidad": "UND",
+      "precio_unitario": 6.0,
+      "descuento_pct": 70,
+      "descuento_monto": null,
+      "importe": 3.6,
+      "categoria": "Accesorios / Dijes y Llaveros"
+    }
+  ],
+  "descuento_global": null,
+  "otros_cargos": null,
+  "op_gravadas": 49.41,
+  "igv": null,
+  "total": 58.3,
+  "observaciones": "El monto del IGV está tapado por un dedo (debería ser 8.89 = 58.30 - 49.41)."
+}
