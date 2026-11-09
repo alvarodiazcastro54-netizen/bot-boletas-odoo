@@ -32,7 +32,9 @@ def _mensaje(texto: str, stop: str = "end_turn") -> dict:
 def test_lee_y_valida(boleta_hongkong, foto_hongkong):
     capturado: list = []
     cliente = _cliente(_mensaje(boleta_hongkong.model_dump_json()), capturado)
-    boleta = asyncio.run(Lector(cliente, "claude-opus-5-5", "high").leer(foto_hongkong))
+    lector = Lector(cliente, "claude-opus-5-5", "high")
+    boleta = asyncio.run(lector.leer(foto_hongkong))
+    assert lector.ultimo_uso == (1500, 900)
 
     assert boleta == boleta_hongkong
     pedido = capturado[0]

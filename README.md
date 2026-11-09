@@ -26,7 +26,7 @@ sigue desde donde quedó sin duplicar nada.
 - [Así se ve en Telegram](#así-se-ve-en-telegram)
 - [Qué necesitas](#qué-necesitas)
 - [1. Crear el bot de Telegram](#1-crear-el-bot-de-telegram)
-- [2. Clave de Anthropic](#2-clave-de-anthropic)
+- [2. La IA que lee las fotos](#2-la-ia-que-lee-las-fotos)
 - [3. Preparar Odoo](#3-preparar-odoo)
 - [4. Probarlo en una PC con Windows](#4-probarlo-en-una-pc-con-windows)
 - [5. Instalarlo en AWS](#5-instalarlo-en-aws-en-la-misma-instancia-ec2-de-odoo)
@@ -41,7 +41,7 @@ sigue desde donde quedó sin duplicar nada.
 
 **Probado:**
 
-- 69 pruebas automáticas. Varias registran de verdad en un **Odoo 19 Community** de prueba con la localización
+- 73 pruebas automáticas. Varias registran de verdad en un **Odoo 19 Community** de prueba con la localización
   peruana (`l10n_pe`): proveedor con RUC, productos con su código y costo, compra, recepción con stock, factura
   borrador tipo 03 con la foto, boleta repetida, registro retomado a medias, factura con crédito fiscal,
   categorías y precio de venta.
@@ -52,7 +52,8 @@ sigue desde donde quedó sin duplicar nada.
 
 **Falta:**
 
-- Probar la **lectura real con IA**: la empresa todavía no tiene clave de la API de Anthropic.
+- Probar la **lectura real con IA**: la empresa todavía no tiene clave de la API de Anthropic. Qué falta saber y
+  cómo medirlo está en la [sección 2](#2-la-ia-que-lee-las-fotos).
 - Medir la lectura con 10 a 20 boletas reales de tiendas distintas (`evaluar_lectura.py`).
 - Instalarlo en AWS, en la instancia EC2 donde corre Odoo (sección 5). Esos pasos no se han probado todavía en
   la instancia real.
@@ -93,7 +94,7 @@ la IA.
   sin categoría).
 - Python 3.12, o Docker.
 - Un bot de Telegram (gratis).
-- Una clave de la API de Anthropic, con saldo. Para probar sin ella existe el modo de prueba.
+- Una clave de la API de Anthropic, con saldo (sección 2). Para probar sin ella existe el modo de prueba.
 
 ## 1. Crear el bot de Telegram
 
@@ -124,25 +125,152 @@ El token es como una contraseña: no lo subas a GitHub ni lo mandes por chat. Si
 Un mismo token solo puede usarlo **un bot a la vez**. Si dejas corriendo el de prueba en tu PC y arrancas el
 del servidor, Telegram rechaza a uno de los dos (error `Conflict` en el registro). Apaga el de la PC antes.
 
-## 2. Clave de Anthropic
+## 2. La IA que lee las fotos
 
-1. Entra a la consola de Anthropic (console.anthropic.com) y crea una clave en **API Keys**.
-2. Carga saldo en **Billing**. Conviene poner un **límite de gasto mensual** en la misma consola.
-3. Pégala en `.env`:
+### Qué hace y qué no hace
+
+La IA es **Claude Opus 5.5**, de Anthropic. El bot la usa por internet, a través de la API de Anthropic, solo
+para una cosa: **convertir la foto de la boleta en datos**. Le devuelve al bot el proveedor, el RUC, la serie, la
+fecha, cada producto con su código, cantidad, precio, descuento e importe, y los totales. También elige la
+categoría de cada producto entre las que ya existen en Odoo.
+
+La IA **no toca Odoo ni decide nada**. Después de leer:
+
+1. el bot revisa las cuentas y el RUC por su cuenta (sin IA);
+2. muestra el resumen en Telegram;
+3. **una persona confirma** con ✅ Registrar. Recién ahí se escribe en Odoo.
+
+La API de Anthropic se paga aparte: una suscripción a Claude (Pro, Max o Team) **no** sirve para esto.
+
+### Estado: todavía no se probó con la IA real
+
+La empresa todavía no tiene clave de la API, así que **nadie ha medido aún qué tan bien lee las boletas
+reales**, cuánto cuesta de verdad cada una ni cuánto tarda.
+
+Lo que sí está probado:
+
+- que el bot arma bien el pedido a la API (la foto, las instrucciones, el formato de respuesta, el modelo, el
+  respaldo automático). Las pruebas usan una API simulada que no cobra;
+- que maneja las fallas: la IA se niega a leer, la respuesta llega cortada, la clave es inválida, no hay saldo
+  o no hay conexión. En todos los casos avisa en Telegram y no registra nada;
+- todo lo que pasa después de leer, con el **modo de prueba**, que usa la lectura de una boleta real revisada a
+  mano.
+
+Por eso, antes de usarlo en serio, hay que **activar la IA y medirla** (los dos pasos siguientes).
+
+### Activarla
+
+1. Entra a la consola de Anthropic (console.anthropic.com) con la cuenta de la empresa.
+2. En **API Keys** crea una clave y cópiala: solo se muestra una vez.
+3. En **Billing** carga saldo (es prepago). En la misma consola pon un **límite de gasto mensual**.
+4. En `.env`:
 
    ```
    ANTHROPIC_API_KEY=sk-ant-...
+   MODO_PRUEBA=no
    ```
 
-Costo estimado con el modelo por defecto (Claude Opus 5.5, esfuerzo `high`): entre 5 y 10 centavos de dólar
-por boleta. Con `CLAUDE_MODELO=claude-haiku-5-5` costaría menos de 1 centavo, pero hay que medir antes si lee
-igual de bien (`evaluar_lectura.py`).
+5. Vuelve a arrancar el bot y mándale una foto.
 
-Las fotos de las boletas se envían a la API de Anthropic para leerlas. Tenlo en cuenta si alguna boleta trae
-datos personales.
+### Medir si lee bien, antes de confiar en ella
 
-**Sin clave (modo de prueba):** con `MODO_PRUEBA=si` el bot no llama a la IA. Cualquier foto devuelve la boleta
-de ejemplo de `muestras/`. Sirve para probar Telegram y Odoo sin gastar nada.
+El script `evaluar_lectura.py` le pasa a la IA cada foto de `muestras/` y compara lo que lee con lo que
+**realmente** dice la boleta, escrito a mano.
+
+1. Junta **10 a 20 fotos reales** de boletas de compra: de varias tiendas, alguna arrugada, con poca luz o con
+   descuentos, y si hay, alguna escrita a mano.
+2. Por cada foto, guarda en `muestras/`:
+   - la foto, por ejemplo `boleta-02-tienda.jpeg`;
+   - su lectura correcta, `boleta-02-tienda.esperado.json`. Copia `boleta-01-hongkong.esperado.json` y cambia
+     los datos por los de la boleta. Lo importante: `precio_unitario` es el precio **antes** del descuento,
+     `descuento_pct` el porcentaje, `importe` el monto final de la línea, `nombre_cortado` es `true` si el nombre
+     se ve cortado en el papel, y lo que no se ve en la foto va como `null`.
+3. Córrelo (gasta API):
+
+   ```
+   .venv\Scripts\python evaluar_lectura.py
+   ```
+
+   Con `--modelo claude-sonnet-5-5` o `--esfuerzo medium` se prueban otras opciones. Con `--sin-api` se prueba
+   el script sin gastar (no mide nada).
+
+4. El resultado se ve así:
+
+   ```
+   ✓ boleta-01-hongkong.jpeg
+   ✗ boleta-02-tienda.jpeg (el bot lo habría detectado):
+       línea 3 cantidad: leyó 2.0, era 3.0
+   ✗ boleta-03-mercado.jpeg (EL BOT NO LO HABRÍA DETECTADO):
+       línea 1 descripción: «TAZA CERAMICA» ≠ «TAZA CERÁMICA»
+
+   Lecturas perfectas: 18 de 20
+   Errores que el bot NO habría detectado: 1
+   Costo estimado: US$ 1.2000 en total, US$ 0.0600 por boleta
+   ```
+
+   - ✓: leyó todo igual que la boleta.
+   - «el bot lo habría detectado»: leyó mal un número, pero las cuentas no cuadran y el bot no habría dejado
+     registrar hasta corregirlo.
+   - «**EL BOT NO LO HABRÍA DETECTADO**»: el error pasaría si nadie revisa el resumen. Es el número más importante.
+   - Las categorías distintas se muestran aparte y no cuentan como error, porque son opinables.
+
+Criterio sugerido para empezar a usarlo: **ningún error de cantidades, precios o totales que el bot no detecte**,
+y que los errores restantes sean de letras en los nombres, que se corrigen en Telegram.
+
+### Cuánto cuesta
+
+Anthropic cobra por **tokens** (pedazos de texto o imagen): lo que se le manda (la foto y las instrucciones) y
+lo que responde. Estos montos son **estimados** hasta medirlos con `evaluar_lectura.py`, que imprime el costo
+real de la prueba:
+
+| Modelo (`CLAUDE_MODELO`) | Precio por millón de tokens (entrada / salida) | Estimado por boleta | 100 boletas al mes |
+|---|---|---|---|
+| `claude-opus-5-5` (por defecto) | US$ 4 / US$ 20 | 5 a 10 centavos | US$ 5 a 10 |
+| `claude-sonnet-5-5` | US$ 2 / US$ 10 | 2 a 5 centavos | US$ 2 a 5 |
+| `claude-haiku-5-5` | US$ 0.10 / US$ 0.50 | menos de 1 centavo | menos de US$ 1 |
+
+`CLAUDE_ESFUERZO` también influye: `low` o `medium` piensan menos, cuestan menos y responden más rápido; `high`
+(por defecto) lee con más cuidado.
+
+Recomendación: empezar con Opus 5.5 y `high`, medir, y después probar Sonnet y Haiku **con las mismas fotos**.
+Cambiar a uno más barato solo si no aparecen errores que el bot no detecte. Un número mal leído termina en el
+stock y en la contabilidad, así que no conviene ahorrar a ciegas.
+
+Los precios son los de lista de noviembre de 2026; los vigentes y el gasto real están en la consola de
+Anthropic.
+
+### Qué pasa cuando la IA se equivoca
+
+- **Números:** si lee mal una cantidad, un precio o un importe, las cuentas dejan de cuadrar y el bot no deja
+  registrar. Se corrige escribiendo, por ejemplo, `3 cantidad 2`, o con el botón 🔄 Leer de nuevo.
+- **RUC:** si lee mal un dígito, casi siempre falla el dígito verificador y el bot lo marca.
+- **Lo que el bot no puede revisar solo:** letras en el nombre de un producto, el código del proveedor, la
+  categoría, o un número de serie mal leído que igual tiene buen formato. Por eso existe el resumen y alguien
+  tiene que mirarlo antes de pulsar ✅ Registrar.
+- **Serie mal leída:** si lee mal el número de la boleta, el bot no podría avisar si esa boleta ya se registró.
+  Revisa el número en el resumen.
+- **Lo que no se ve en la foto** (tapado por un dedo, borroso) la IA lo deja vacío en lugar de inventarlo, y el
+  bot lo muestra como aviso.
+
+### Respaldo automático
+
+Muy rara vez, un filtro de seguridad de la IA puede negarse a leer una imagen normal. Para ese caso está activado
+el respaldo de Anthropic: la misma API reintenta con otro modelo automáticamente, sin hacer nada. Está en
+`fallbacks="default"`, `boletas/lectura.py` línea 119.
+
+### Qué se le envía a Anthropic
+
+- La **foto** (achicada si es muy grande), las instrucciones de lectura y los **nombres de las categorías** de
+  Odoo.
+- **No** se envían datos de Odoo (productos, precios, clientes), ni la clave de Odoo, ni el token de Telegram.
+- Según la política de Anthropic para la API, por defecto los datos no se usan para entrenar sus modelos;
+  revisen la política vigente en su web. Las boletas de compra casi no traen datos personales, pero tenlo en
+  cuenta si alguna trae el DNI o el nombre de una persona.
+
+### Probar sin IA (modo de prueba)
+
+Con `MODO_PRUEBA=si` el bot no llama a la IA ni necesita `ANTHROPIC_API_KEY`. Cualquier foto devuelve la boleta de
+ejemplo de `muestras/`, ya revisada a mano. Sirve para probar Telegram y Odoo sin gastar nada.
 
 - Úsalo **solo con una base de prueba**: si lo apuntas a la base real, registra de verdad la boleta de ejemplo.
 - Como siempre es la misma boleta, la segunda vez dirá que ya está registrada. Para simular otra compra,
@@ -467,16 +595,15 @@ su contador. Revísenlas antes de usarlo en serio.
 | **Descuento global** | Se reparte entre los productos | Baja su costo real | `_precios()`, `boletas/registro.py` línea 216 |
 | **Tolerancia de las cuentas** | Diferencias de hasta S/ 0.02 se aceptan | Redondeos normales de las boletas | `TOLERANCIA`, `boletas/validacion.py` línea 10 |
 | **Tipo de documento** | boleta → 03, factura → 01, ticket → 12 | Tabla 10 de SUNAT | `CODIGO_DOCUMENTO`, `boletas/registro.py` línea 16 |
-| **Modelo de IA** | Claude Opus 5.5, esfuerzo `high`, con respaldo automático si el modelo se niega a leer | Prioridad: leer bien los números | `CLAUDE_MODELO`, `CLAUDE_ESFUERZO`; el respaldo es `fallbacks`, `boletas/lectura.py` línea 118 |
+| **Modelo de IA** | Claude Opus 5.5, esfuerzo `high`, con respaldo automático si el modelo se niega a leer | Prioridad: leer bien los números | `CLAUDE_MODELO`, `CLAUDE_ESFUERZO`; el respaldo es `fallbacks`, `boletas/lectura.py` línea 119 |
 | **Tamaño de la foto** | Se achica a 2400 px si es más grande | Límite de la API | `MAX_LADO`, `boletas/lectura.py` línea 29 |
 
 Los números de línea son los de esta versión; si cambian, busca el nombre de la función.
 
 ## Recomendaciones para la empresa
 
-1. **Probar con 10 a 20 boletas reales** antes de confiar en el bot: guarda cada foto en `muestras/` con su
-   `.esperado.json` escrito a mano y corre `evaluar_lectura.py`. Incluye boletas de varias tiendas y, si hay,
-   alguna escrita a mano.
+1. **Medir la IA con 10 a 20 boletas reales** antes de confiar en el bot, como explica la
+   [sección 2](#medir-si-lee-bien-antes-de-confiar-en-ella).
 2. **Usar una copia neutralizada de la base** para las primeras pruebas, nunca la base real.
 3. **Darle al bot su propio usuario de Odoo**, con acceso solo a la empresa de las compras y solo los permisos
    de la sección 3.

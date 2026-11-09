@@ -93,6 +93,7 @@ class Lector:
         self.cliente = cliente
         self.modelo = modelo
         self.esfuerzo = esfuerzo
+        self.ultimo_uso: tuple[int, int] = (0, 0)
 
     async def leer(self, foto: bytes, categorias: list[str] | None = None) -> Boleta:
         datos, media_type = preparar_imagen(foto)
@@ -139,6 +140,7 @@ class Lector:
             log.error("Error %s de Anthropic: %s", exc.status_code, exc)
             raise LecturaError("La IA falló al leer la boleta. Intenta en un minuto.") from exc
 
+        self.ultimo_uso = (respuesta.usage.input_tokens, respuesta.usage.output_tokens)
         log.info(
             "Lectura %s: modelo=%s stop=%s tokens in=%s out=%s",
             respuesta._request_id, respuesta.model, respuesta.stop_reason,
