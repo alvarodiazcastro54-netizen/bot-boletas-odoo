@@ -1,0 +1,11 @@
+line-length = 120
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["E741", "RUF001", "RUF002", "RUF003"]
+
+[lint.isort]
+known-first-party = ["boletas"]
+known-local-folder = ["conftest", "test_ajustes", "test_archivos", "test_bot", "test_bot_archivos", "test_registro",
+                      "test_registro_compras", "test_sunat"]
